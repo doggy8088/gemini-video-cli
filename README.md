@@ -250,6 +250,18 @@ npm pack --dry-run
 git log --format=fuller
 ```
 
+## 初始 npm 占位版本
+
+`release/placeholder/` 是獨立的 `gemini-video-cli@0.0.0` 發布內容，只包含套件描述、README 及 MIT 授權，沒有 CLI 程式、執行入口或相依套件。現有完整 CLI 留在專案根目錄，版本仍為 `0.1.0`，未包含在占位版本內。
+
+```bash
+make pack-placeholder     # 檢查 dist/gemini-video-cli-0.0.0.tgz
+npm login --registry=https://registry.npmjs.org/
+make publish-placeholder  # 僅發布占位版本
+```
+
+發布需要有效的 npm 登入狀態，以及該名稱的發布權限。`make pack` 仍會封裝根目錄的完整 CLI；初始空套件請使用 `pack-placeholder` 與 `publish-placeholder`。
+
 ## 官方來源
 
 查閱日期：2026-10-22。Gemini API 仍會更新，請以官方文件及帳戶可用模型為準。

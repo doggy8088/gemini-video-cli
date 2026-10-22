@@ -1,0 +1,11 @@
+{
+  "name": "gemini-video-cli",
+  "version": "0.0.0",
+  "description": "Initial placeholder for the Gemini video understanding CLI. Implementation coming in a future release.",
+  "license": "MIT",
+  "files": ["README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

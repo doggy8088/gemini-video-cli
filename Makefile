@@ -4,7 +4,7 @@ NODE ?= node
 NPM ?= npm
 ARGS ?= --help
 
-.PHONY: help install install-global test check verify run demo pack clean
+.PHONY: help install install-global test check verify run demo pack pack-placeholder publish-placeholder clean
 
 help:
 	@printf '%s\n' \
@@ -17,6 +17,8 @@ help:
 	  '  make run ARGS="..."   Run the CLI (defaults to --help)' \
 	  '  make demo            Preview the mixed-video example offline' \
 	  '  make pack            Create an npm tarball in dist/' \
+	  '  make pack-placeholder     Package the empty 0.0.0 release in dist/' \
+	  '  make publish-placeholder  Publish only the empty 0.0.0 release to npm' \
 	  '  make clean           Remove generated dist/ artifacts'
 
 install:
@@ -43,6 +45,13 @@ demo:
 pack:
 	@mkdir -p dist
 	$(NPM) pack --pack-destination dist
+
+pack-placeholder:
+	@mkdir -p dist
+	$(NPM) pack ./release/placeholder --pack-destination dist
+
+publish-placeholder:
+	$(NPM) publish ./release/placeholder --access public --tag latest --registry=https://registry.npmjs.org/
 
 clean:
 	@$(NODE) -e 'require("node:fs").rmSync("dist", { recursive: true, force: true })'
