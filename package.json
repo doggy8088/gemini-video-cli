@@ -1,0 +1,17 @@
+{
+  "name": "gemini-video-cli",
+  "version": "0.1.0",
+  "description": "Gemini video understanding from your terminal: files, YouTube, prompts and conversations",
+  "type": "module",
+  "bin": { "gemini-video": "src/cli.js" },
+  "exports": "./src/core.js",
+  "files": ["src", "README.md", "examples", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/cli.js && node --check src/core.js",
+    "start": "node src/cli.js"
+  },
+  "license": "MIT",
+  "dependencies": { "@google/genai": "^2.30.0" }
+}
