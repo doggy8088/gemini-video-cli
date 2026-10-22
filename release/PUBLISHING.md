@@ -2,6 +2,17 @@
 
 日期：2026-10-22
 
+## 占位版本下架
+
+2026-10-22 依使用者要求，已分別執行並完成：
+
+- `npm unpublish gemini-video-cli@0.0.0`
+- `npm unpublish gemini-video-cli@0.0.0-stage`
+
+已確認公開 registry 不再列出這兩個版本，且兩份 tarball 均回傳 HTTP 404。
+驗證當時保留的功能版本為 `0.1.0`、`0.1.1`，`latest` 指向 `0.1.1`。
+下方保留原始發布歷史；占位版本已無法安裝，也不應重新發布相同版本。
+
 - 套件：`gemini-video-cli`
 - 提交版本：`0.0.0`
 - npm 帳號：`willh`
