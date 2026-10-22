@@ -74,8 +74,9 @@ const jsonFile = async path => {
 };
 async function stdin() {
   if (process.stdin.isTTY) throw new UsageError('Prompt missing; use --prompt, --prompt-file or pipe text to STDIN');
+  process.stdin.setEncoding('utf8');
   let text = '';
-  for await (const chunk of process.stdin) text += chunk.toString('utf8');
+  for await (const chunk of process.stdin) text += chunk;
   return text;
 }
 async function main() {
