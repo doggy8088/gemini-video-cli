@@ -15,6 +15,15 @@
 - `git diff --check`：無空白錯誤。
 - 初次 `npm install` 相依套件稽核：0 個已知漏洞。
 
+## Makefile 任務驗證
+
+- `make`：正確列出常用任務；`make run` 預設顯示 CLI 說明。
+- `make verify`：22 項測試及 JavaScript 語法檢查全部通過。
+- `make demo`：輸出可解析的混合影片請求 JSON。
+- 繁中提示詞經 STDIN 傳入 `make run ARGS='-v https://youtu.be/test --dry-run'`：內容完整，STDOUT 無 recipe 雜訊。
+- `make pack`：成功將 npm tarball 寫入 `dist/`；`make clean`：成功移除該產物目錄。
+- `make -n install install-global`：確認分別呼叫 `npm ci` 與 `npm install --global .`；本次未重新安裝相依套件或全域命令。
+
 ## 未驗證
 
 - 尚未呼叫真實 Google API，因此不宣稱已驗證帳戶權限、實際上傳、模型可用性、YouTube 存取、額度或模型輸出品質。

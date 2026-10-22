@@ -206,6 +206,30 @@ Agentic 會依問題探索影片，適合長影片與特定事件搜尋。模型
 
 ## 開發與驗證
 
+專案提供 Makefile。執行 `make` 或 `make help` 可列出常用任務：
+
+```bash
+make install         # 依 lockfile 安裝相依套件
+make install-global  # 安裝 gemini-video 全域命令
+make verify          # 執行測試與 JavaScript 語法檢查
+make test            # 只執行測試
+make check           # 只執行語法檢查
+make demo            # 離線預覽多影片範例，不需要 API 金鑰
+make pack            # 在 dist/ 產生 npm 安裝封裝
+make clean           # 只刪除 dist/ 產物
+```
+
+`make run` 預設顯示 CLI 說明，可用 `ARGS` 傳入參數；也支援提示詞 STDIN：
+
+```bash
+make run ARGS='-v ./clip.mp4 -p "用繁體中文摘要。"'
+printf '%s\n' '描述重要事件。' | make run ARGS='-v ./clip.mp4'
+```
+
+`run` 與 `demo` 不會把 Make recipe 印到 STDOUT，可將結果直接接到其他程式。需要指定執行檔時可覆寫 `NODE` 或 `NPM`，例如 `make demo NODE=/path/to/node`。Makefile 任務均須在專案目錄執行；`install-global` 會更新目前 npm 全域環境中的命令。
+
+也可以直接執行原本的 npm 指令：
+
 ```bash
 npm ci
 npm test
