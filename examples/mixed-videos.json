@@ -1,0 +1,17 @@
+[
+  {
+    "source": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+    "name": "full_video",
+    "processing": "agentic",
+    "resolution": "low"
+  },
+  {
+    "source": "https://www.youtube.com/watch?v=9hE5-98ZeCg",
+    "name": "opening_segment",
+    "processing": "static",
+    "start": "00:00",
+    "end": "00:30",
+    "fps": 1,
+    "resolution": "high"
+  }
+]
