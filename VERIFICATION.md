@@ -35,7 +35,7 @@
 ## 未驗證
 
 - 尚未呼叫真實 Google API，因此不宣稱已驗證帳戶權限、實際上傳、模型可用性、YouTube 存取、額度或模型輸出品質。
-- 未執行跨平台實機測試；使用 Node.js 標準檔案與參數 API，以維持跨平台可攜性。
+- 跨平台驗證已由 GitHub Actions 完成：Ubuntu、macOS、Windows 各 Node.js 22 與 24 均通過 28 項自動測試。
 
 ## 文件差異處理
 

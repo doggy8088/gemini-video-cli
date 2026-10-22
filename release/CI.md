@@ -38,6 +38,15 @@
 
 GitHub `npm` environment 僅允許 main 分支部署。OIDC 權限只給發布工作；其餘工作採唯讀儲存庫權限。GitHub Actions 以完整 commit SHA 固定版本。
 
+## 設定與實測紀錄（2026-10-22）
+
+- 已透過 npm 網站建立 Trusted Publisher；畫面確認「Successfully added new Trusted Publisher connection.」。
+- 已核對儲存的 GitHub repo、publish.yml、npm environment 與 npm publish 權限。
+- 第一個 main CI 及 PR #1 均通過六組作業系統／Node.js 組合，各執行全部 28 項測試。
+- PR #1 的 Tests passed 必要檢查成功後已合併，確認 PR 與 main push 事件均能觸發對應流程。
+- 設定保存後，已重跑 main 的發布作業；GitHub OIDC 認證與 npm publish 步驟成功。發布流程會等待 registry 驗證版本才判定整體成功。
+- 發布執行紀錄：https://github.com/doggy8088/gemini-video-cli/actions/runs/39775145170
+
 ## 查看與重試
 
 ```bash
