@@ -7,7 +7,8 @@
 需要 **Node.js 22 以上**及 Gemini API 金鑰。
 
 ```bash
-cd /Users/will/demo/gemini-video-cli
+git clone https://github.com/doggy8088/gemini-video-cli.git
+cd gemini-video-cli
 npm ci
 npm install --global .
 export GEMINI_API_KEY='你的金鑰'
