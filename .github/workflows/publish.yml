@@ -1,0 +1,49 @@
+name: Publish npm
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish with npm trusted publishing
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install npm with OIDC support
+        run: npm install --global npm@12.2.1
+      - run: npm ci
+      - name: Select an unpublished version
+        id: release
+        run: node scripts/prepare-release.mjs
+      - name: Publish using GitHub OIDC
+        if: steps.release.outputs.publish == 'true'
+        run: npm publish --provenance --access public --tag latest --registry=https://registry.npmjs.org/
+      - name: Verify registry propagation
+        if: steps.release.outputs.publish == 'true'
+        run: node scripts/verify-release.mjs

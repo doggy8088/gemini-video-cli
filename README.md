@@ -240,7 +240,7 @@ npm run check
 npm pack --dry-run
 ```
 
-目前 23 項測試涵蓋 CLI 輸入、處理狀態、錯誤、清理、串流、背景工作、對話步驟與 SDK 請求序列化。測試只使用模擬服務與本機 HTTP 伺服器，不消耗 Gemini 配額。**尚未進行真實 Google API 上傳／推論測試**；要驗證帳戶、模型及真實影片相容性，可先執行 dry-run，再用自己的短影片送出一次請求。
+目前 28 項測試涵蓋 CLI 輸入、處理狀態、錯誤、清理、串流、背景工作、對話步驟與 SDK 請求序列化。測試只使用模擬服務與本機 HTTP 伺服器，不消耗 Gemini 配額。**尚未進行真實 Google API 上傳／推論測試**；要驗證帳戶、模型及真實影片相容性，可先執行 dry-run，再用自己的短影片送出一次請求。
 
 退出碼：`0` 成功、`1` API／I/O／處理失敗、`2` 參數或必要設定錯誤。
 
@@ -249,6 +249,12 @@ npm pack --dry-run
 ```bash
 git log --format=fuller
 ```
+
+## GitHub CI 與自動發布
+
+公開儲存庫：https://github.com/doggy8088/gemini-video-cli
+
+PR 會在 Linux、macOS、Windows 的 Node.js 22／24 執行測試。每次 main push 在測試全部通過後，以 npm Trusted Publishing 自動發布新版本，不使用長期 npm token。完整流程、版本規則與重試方式見 [release/CI.md](release/CI.md)。
 
 ## 初始 npm 占位版本
 

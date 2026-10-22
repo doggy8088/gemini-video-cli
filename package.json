@@ -3,15 +3,38 @@
   "version": "0.1.0",
   "description": "Gemini video understanding from your terminal: files, YouTube, prompts and conversations",
   "type": "module",
-  "bin": { "gemini-video": "src/cli.js" },
+  "bin": {
+    "gemini-video": "src/cli.js"
+  },
   "exports": "./src/core.js",
-  "files": ["src", "README.md", "examples", "LICENSE"],
-  "engines": { "node": ">=22" },
+  "files": [
+    "src",
+    "README.md",
+    "examples",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/cli.js && node --check src/core.js",
+    "check": "node --check src/cli.js && node --check src/core.js && node --check scripts/prepare-release.mjs && node --check scripts/verify-release.mjs",
     "start": "node src/cli.js"
   },
   "license": "MIT",
-  "dependencies": { "@google/genai": "^2.30.0" }
+  "dependencies": {
+    "@google/genai": "^2.30.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/doggy8088/gemini-video-cli.git"
+  },
+  "homepage": "https://github.com/doggy8088/gemini-video-cli#readme",
+  "bugs": {
+    "url": "https://github.com/doggy8088/gemini-video-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
 }

@@ -85,7 +85,11 @@ async function main() {
   catch (error) { throw new UsageError(error.message); }
   const { values: v, positionals } = parsed;
   if (v.help) { process.stdout.write(HELP); return; }
-  if (v.version) { process.stdout.write('0.1.0\n'); return; }
+  if (v.version) {
+    const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    process.stdout.write(`${version}\n`);
+    return;
+  }
   const command = positionals[0] ?? 'analyze';
   if (!['analyze', 'files', 'jobs'].includes(command)) throw new UsageError(`Unknown command: ${command}`);
   const allowed = command === 'analyze' ? Object.keys(definitions).filter(k => k !== 'wait') :
