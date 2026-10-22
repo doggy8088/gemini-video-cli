@@ -20,7 +20,7 @@ Inputs:
   -p, --prompt TEXT        Repeat; '-' reads prompt from STDIN
       --prompt-file PATH  Read UTF-8 prompt; combined with -p in that order
       --manifest PATH     JSON array of per-video settings (see README)
-      --transport MODE    upload (default), inline, auto
+      --transport MODE    auto (default), upload, inline
       --mime-type TYPE    Override MIME for extensionless local files
       --processing MODE   static (default), agentic
       --start TIME        Seconds, MM:SS, HH:MM:SS (static only)

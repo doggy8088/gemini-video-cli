@@ -73,7 +73,7 @@ export async function inspectVideos(specs) {
     const part = { type: 'video', processing: processing(spec) };
     if (spec.resolution) part.resolution = choice(spec.resolution, ['low', 'medium', 'high', 'ultra_high'], 'resolution');
     if (spec.name) part.name = spec.name;
-    const transport = choice(spec.transport ?? 'upload', ['upload', 'inline', 'auto'], 'transport');
+    const transport = choice(spec.transport ?? 'auto', ['upload', 'inline', 'auto'], 'transport');
     let size = 0;
     if (kind === 'local') {
       const info = await stat(spec.source);

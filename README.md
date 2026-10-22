@@ -56,14 +56,17 @@ cat questions.txt | gemini-video -v ./clip.mp4 -p '請回答下列問題：' -p 
 ## 影片來源與檔案處理
 
 ```bash
-# 預設走 Files API，上傳後等待 ACTIVE
- gemini-video -v ./long-lecture.mp4 -p '列出課程大綱。'
+# 預設 auto：小影片 inline，超過剩餘請求空間時走 Files API 並等待 ACTIVE
+ gemini-video -v ./video.mp4 -p '列出影片重點。'
+
+# 長影片或預計重複使用的影片，可明確指定上傳
+ gemini-video -v ./long-lecture.mp4 --transport upload -p '列出課程大綱。'
 
 # 短影片 inline；總請求包含 base64、文字、歷史及 JSON 必須小於 20 MB
  gemini-video -v ./short.mp4 --transport inline -p '畫面裡發生什麼事？'
 
-# 小檔 inline，剩餘請求空間不足時改上傳
- gemini-video -v ./a.mp4 -v ./b.mp4 --transport auto -p '比較兩段影片。'
+# 多影片也會自動計算剩餘請求空間，不需指定 --transport auto
+ gemini-video -v ./a.mp4 -v ./b.mp4 -p '比較兩段影片。'
 
 # 公開 YouTube；不需要先下載
  gemini-video -v 'https://www.youtube.com/watch?v=9hE5-98ZeCg' -p '產生測驗及答案。'
@@ -202,7 +205,7 @@ Agentic 會依問題探索影片，適合長影片與特定事件搜尋。模型
 | 長請求串流或背景執行 | `--stream`、`--background`、`jobs get --wait` |
 | Token 使用與處理步驟 | `--json` 的 `usage`、`steps` |
 
-影片長度、模型上下文、YouTube 配額及可存取性仍受 Gemini API 限制。CLI 無法在本機事先確認 YouTube 是否公開、模型額度或影片實際 token 數；相關錯誤會由 API 回傳。CLI 以大小選擇 `auto` 傳輸，不會探測影片時長；長影片請保留預設 `upload`。
+影片長度、模型上下文、YouTube 配額及可存取性仍受 Gemini API 限制。CLI 無法在本機事先確認 YouTube 是否公開、模型額度或影片實際 token 數；相關錯誤會由 API 回傳。預設 `auto` 依影片的 base64 大小與整體請求剩餘空間選擇 inline 或上傳，不會探測影片時長；長影片或預計重複使用的影片請明確指定 `--transport upload`。未設定 `transport` 的 manifest 項目也採用 `auto`，但仍可由全域旗標或各項設定覆寫。
 
 ## 開發與驗證
 
@@ -237,7 +240,7 @@ npm run check
 npm pack --dry-run
 ```
 
-目前 22 項測試涵蓋 CLI 輸入、處理狀態、錯誤、清理、串流、背景工作、對話步驟與 SDK 請求序列化。測試只使用模擬服務與本機 HTTP 伺服器，不消耗 Gemini 配額。**尚未進行真實 Google API 上傳／推論測試**；要驗證帳戶、模型及真實影片相容性，可先執行 dry-run，再用自己的短影片送出一次請求。
+目前 23 項測試涵蓋 CLI 輸入、處理狀態、錯誤、清理、串流、背景工作、對話步驟與 SDK 請求序列化。測試只使用模擬服務與本機 HTTP 伺服器，不消耗 Gemini 配額。**尚未進行真實 Google API 上傳／推論測試**；要驗證帳戶、模型及真實影片相容性，可先執行 dry-run，再用自己的短影片送出一次請求。
 
 退出碼：`0` 成功、`1` API／I/O／處理失敗、`2` 參數或必要設定錯誤。
 

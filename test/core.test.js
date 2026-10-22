@@ -53,7 +53,7 @@ test('validates option combinations and history shape', () => {
 test('uploads local files, sends video before prompt, and cleans up', async t => {
   const file = await fixture(t);
   const client = fake();
-  const videos = await inspectVideos([{ source: file, start: 5, end: 10, resolution: 'high' }]);
+  const videos = await inspectVideos([{ source: file, transport: 'upload', start: 5, end: 10, resolution: 'high' }]);
   const result = await analyze(client, videos, 'Describe at 00:06', { cleanup: true }, ctx());
   assert.equal(result.text, 'A useful summary.');
   assert.deepEqual(client.calls.map(x => x[0]), ['upload', 'create', 'delete']);
@@ -65,7 +65,7 @@ test('uploads local files, sends video before prompt, and cleans up', async t =>
 test('inline, auto, existing files and mixed YouTube processing', async t => {
   const file = await fixture(t);
   const client = fake();
-  const videos = await inspectVideos([{ source: file, transport: 'inline' }, { source: file, transport: 'auto' },
+  const videos = await inspectVideos([{ source: file, transport: 'inline' }, { source: file },
     { source: 'files/test', processing: 'agentic' }, { source: 'https://youtu.be/test', processing: 'static' }]);
   await analyze(client, videos, 'Compare', {}, ctx());
   assert.deepEqual(client.calls.map(x => x[0]), ['get', 'create']);
@@ -78,7 +78,7 @@ test('inline, auto, existing files and mixed YouTube processing', async t => {
 
 test('dry-run has no client and omits binary payloads', async t => {
   const file = await fixture(t);
-  const videos = await inspectVideos([{ source: file, transport: 'inline' }, { source: 'files/test' }, { source: file }]);
+  const videos = await inspectVideos([{ source: file, transport: 'inline' }, { source: 'files/test' }, { source: file, transport: 'upload' }]);
   const { request } = await analyze(null, videos, 'Summary', { dryRun: true }, ctx());
   assert.match(request.input[0].data, /base64: 4 bytes/);
   assert.match(request.input[1].uri, /existing/);
@@ -90,7 +90,7 @@ test('aggregate inline size is limited and auto falls back to upload', async t =
   await truncate(file, 8_000_000);
   const specs = [{ source: file, transport: 'inline' }, { source: file, transport: 'inline' }];
   await assert.rejects(analyze(null, await inspectVideos(specs), 'x', { dryRun: true }, ctx()), /20 MB/);
-  specs[1].transport = 'auto';
+  delete specs[1].transport;
   const { request } = await analyze(null, await inspectVideos(specs), 'x', { dryRun: true }, ctx());
   assert.match(request.input[1].uri, /upload/);
   assert.ok(REQUEST_LIMIT > 0);
@@ -118,7 +118,7 @@ test('file processing handles ACTIVE, FAILED, unknown and timeout states', async
 
 test('cleanup on processing/generation failure, but retains files for uncertain background task', async t => {
   const file = await fixture(t);
-  const videos = await inspectVideos([{ source: file }]);
+  const videos = await inspectVideos([{ source: file, transport: 'upload' }]);
   for (const background of [false, true]) {
     const client = fake({ interactions: { create: async () => { throw new Error('connection lost'); } } });
     await assert.rejects(analyze(client, videos, 'x', { cleanup: true, background }, ctx()), /connection lost/);

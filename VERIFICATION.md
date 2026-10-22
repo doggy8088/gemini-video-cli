@@ -3,6 +3,14 @@
 日期：2026-10-22
 環境：macOS、Node.js v24.22.1、npm 12.2.1、@google/genai 2.30.0。
 
+## 預設 auto 傳輸更新
+
+- `--video` 與未設定 `transport` 的 manifest 項目，預設改為 `auto`。
+- `make verify`：23 項測試及 JavaScript 語法檢查全部通過。
+- 新增 CLI 回歸測試：未指定傳輸模式的小影片使用 inline；大影片與超過總請求預算的後續影片改為上傳；明確指定 `--transport upload` 仍優先適用。
+- manifest 測試確認未指定傳輸模式時使用 inline；既有上傳與清理測試明確指定 upload，持續驗證該流程。
+- 更新 CLI 說明與 README 的預設值、操作範例及長影片建議。未進行真實 Google API 上傳或推論。
+
 ## 已通過
 
 - `npm test`：22 項全部通過，無略過測試。
