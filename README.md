@@ -7,10 +7,7 @@
 需要 **Node.js 22 以上**及 Gemini API 金鑰。
 
 ```bash
-git clone https://github.com/doggy8088/gemini-video-cli.git
-cd gemini-video-cli
-npm ci
-npm install --global .
+npm install --global gemini-video-cli
 export GEMINI_API_KEY='你的金鑰'
 
 gemini-video --help
@@ -18,20 +15,18 @@ gemini-video -v ./meeting.mp4 -p '用繁體中文摘要這段影片，附上重�
 printf '%s\n' '列出主要事件及音訊與畫面細節。' | gemini-video -v ./meeting.mp4
 ```
 
-不安裝全域命令也能使用 `node src/cli.js`。例如：
+套件名稱是 `gemini-video-cli`，安裝後的命令是 `gemini-video`。可在影片所在的資料夾直接執行，不需要下載原始碼。更新至最新版時，重新執行上述安裝指令即可。
+
+不安裝全域命令也能透過 `npx` 執行。例如：
 
 ```bash
-node src/cli.js -v 'https://www.youtube.com/watch?v=9hE5-98ZeCg' \
+npx --yes --package gemini-video-cli gemini-video -v 'https://www.youtube.com/watch?v=9hE5-98ZeCg' \
   -p '用三句話摘要。' --dry-run
 ```
 
 `--dry-run` 不需要金鑰，不連線、不上傳、不讀入完整影片的 base64；它會檢查本機檔案並顯示預計的請求。預設模型是 `gemini-3.8-flash`，可用 `--model` 或 `GEMINI_MODEL` 覆寫。
 
-金鑰依序讀取 `GEMINI_API_KEY`、`GOOGLE_API_KEY`。CLI 不自動載入 `.env`，也不提供會將金鑰留在 shell 歷史的金鑰旗標。可以複製 `.env.example` 後使用：
-
-```bash
-node --env-file=.env src/cli.js -v ./meeting.mp4 -p '摘要這段影片。'
-```
+金鑰依序讀取 `GEMINI_API_KEY`、`GOOGLE_API_KEY`。CLI 不自動載入 `.env`，也不提供會將金鑰留在 shell 歷史的金鑰旗標。請透過環境變數提供金鑰；從原始碼執行時，使用 `.env` 的方式見下方開發章節。
 
 ## 提示詞與輸出
 
@@ -210,7 +205,42 @@ Agentic 會依問題探索影片，適合長影片與特定事件搜尋。模型
 
 影片長度、模型上下文、YouTube 配額及可存取性仍受 Gemini API 限制。CLI 無法在本機事先確認 YouTube 是否公開、模型額度或影片實際 token 數；相關錯誤會由 API 回傳。預設 `auto` 依影片的 base64 大小與整體請求剩餘空間選擇 inline 或上傳，不會探測影片時長；長影片或預計重複使用的影片請明確指定 `--transport upload`。未設定 `transport` 的 manifest 項目也採用 `auto`，但仍可由全域旗標或各項設定覆寫。
 
-## 開發與驗證
+## 從原始碼建置、開發與驗證
+
+參與本專案開發或驗證尚未發布的修改時，請先安裝 Git、Node.js 22 以上及 npm，再取得原始碼：
+
+```bash
+git clone https://github.com/doggy8088/gemini-video-cli.git
+cd gemini-video-cli
+npm ci
+node src/cli.js --help
+```
+
+本專案使用原生 JavaScript，不需要額外編譯或 build 步驟。修改 `src/` 後可直接執行 `node src/cli.js`，或使用 `npm start --` 傳入 CLI 參數：
+
+```bash
+npm start -- -v 'https://www.youtube.com/watch?v=9hE5-98ZeCg' \
+  -p '用三句話摘要。' --dry-run
+```
+
+需要呼叫 API 時，可設定環境變數，或複製 `.env.example` 為 `.env` 並填入金鑰，再由 Node.js 載入：
+
+```bash
+cp .env.example .env
+# 編輯 .env，填入自己的 API 金鑰
+node --env-file=.env src/cli.js -v ./meeting.mp4 -p '摘要這段影片。'
+```
+
+驗證修改並產生可安裝的原始碼封裝：
+
+```bash
+npm test
+npm run check
+npm pack --dry-run
+npm pack
+```
+
+`npm pack` 會在目前資料夾產生 `gemini-video-cli-<版本>.tgz`。可用 `npm install --global ./gemini-video-cli-<版本>.tgz` 安裝，請將 `<版本>` 換成實際產生的檔名。若要直接將目前工作目錄的版本安裝為全域命令，可在專案根目錄執行 `npm install --global .`；此操作會更新目前 npm 環境中的 `gemini-video` 命令。要切回 npm 已發布版本，執行 `npm install --global gemini-video-cli`。
 
 專案提供 Makefile。執行 `make` 或 `make help` 可列出常用任務：
 
@@ -234,15 +264,6 @@ printf '%s\n' '描述重要事件。' | make run ARGS='-v ./clip.mp4'
 
 `run` 與 `demo` 不會把 Make recipe 印到 STDOUT，可將結果直接接到其他程式。需要指定執行檔時可覆寫 `NODE` 或 `NPM`，例如 `make demo NODE=/path/to/node`。Makefile 任務均須在專案目錄執行；`install-global` 會更新目前 npm 全域環境中的命令。
 
-也可以直接執行原本的 npm 指令：
-
-```bash
-npm ci
-npm test
-npm run check
-npm pack --dry-run
-```
-
 目前 29 項測試涵蓋 CLI 輸入、處理狀態、錯誤、清理、串流、背景工作、對話步驟、Unicode 檔名上傳與 SDK 請求序列化。測試只使用模擬服務與本機 HTTP 伺服器，不消耗 Gemini 配額。**尚未進行真實 Google API 上傳／推論測試**；要驗證帳戶、模型及真實影片相容性，可先執行 dry-run，再用自己的短影片送出一次請求。
 
 退出碼：`0` 成功、`1` API／I/O／處理失敗、`2` 參數或必要設定錯誤。
@@ -259,17 +280,7 @@ git log --format=fuller
 
 PR 會在 Linux、macOS、Windows 的 Node.js 22／24 執行測試。每次 main push 在測試全部通過後，以 npm Trusted Publishing 自動發布新版本，不使用長期 npm token。完整流程、版本規則與重試方式見 [release/CI.md](release/CI.md)。
 
-## 初始 npm 占位版本
-
-`release/placeholder/` 是獨立的 `gemini-video-cli@0.0.0` 發布內容，只包含套件描述、README 及 MIT 授權，沒有 CLI 程式、執行入口或相依套件。現有完整 CLI 留在專案根目錄，版本仍為 `0.1.0`，未包含在占位版本內。
-
-```bash
-make pack-placeholder     # 檢查 dist/gemini-video-cli-0.0.0.tgz
-npm login --registry=https://registry.npmjs.org/
-make publish-placeholder  # 僅發布占位版本
-```
-
-發布需要有效的 npm 登入狀態，以及該名稱的發布權限。`make pack` 仍會封裝根目錄的完整 CLI；初始空套件請使用 `pack-placeholder` 與 `publish-placeholder`。
+`release/placeholder/` 保留最初 `0.0.0` 占位版本的發布資料，供維護紀錄參考；目前使用者請依本頁安裝章節取得 npm 已發布的 CLI。
 
 ## 官方來源
 
