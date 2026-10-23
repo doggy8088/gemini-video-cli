@@ -6,9 +6,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 export const DEFAULT_MODEL = 'gemini-3.8-flash';
 export const REQUEST_LIMIT = 20_000_000;
 const FILE_LIMIT = 2_000_000_000;
-const MIME = { '.mp4': 'video/mp4', '.mpeg': 'video/mpeg', '.mpg': 'video/mpg',
+const VIDEO_MIME = { '.mp4': 'video/mp4', '.mpeg': 'video/mpeg', '.mpg': 'video/mpg',
   '.mov': 'video/mov', '.avi': 'video/avi', '.flv': 'video/x-flv',
   '.webm': 'video/webm', '.wmv': 'video/wmv', '.3gp': 'video/3gpp', '.3gpp': 'video/3gpp' };
+const AUDIO_MIME = { '.wav': 'audio/wav', '.mp3': 'audio/mp3', '.aiff': 'audio/aiff',
+  '.aif': 'audio/aiff', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.oga': 'audio/ogg',
+  '.flac': 'audio/flac', '.m4a': 'audio/m4a', '.l16': 'audio/l16', '.pcm': 'audio/l16',
+  '.opus': 'audio/opus', '.alaw': 'audio/alaw', '.mulaw': 'audio/mulaw', '.webm': 'audio/webm' };
+const MIME = { ...AUDIO_MIME, ...VIDEO_MIME };
 
 export class UsageError extends Error {}
 export function choice(value, values, label) {
@@ -47,10 +52,32 @@ export function processing(spec) {
   return { type: 'static', ...(start !== undefined && { start_offset: `${start}s` }),
     ...(end !== undefined && { end_offset: `${end}s` }), ...(fps !== undefined && { fps }) };
 }
-export function mimeType(path, override) {
-  const mime = override ?? MIME[extname(path).toLowerCase()];
-  if (!Object.values(MIME).includes(mime)) throw new UsageError(`Unsupported video type: ${override ?? path}. Use --mime-type for extensionless files.`);
+export function mimeType(path, override, type) {
+  const mime = override ?? (type === 'audio' ? AUDIO_MIME : MIME)[extname(path).toLowerCase()];
+  if (![...Object.values(VIDEO_MIME), ...Object.values(AUDIO_MIME), 'audio/mpeg'].includes(mime)) throw new UsageError(`Unsupported media type: ${override ?? path}. Use --mime-type for extensionless files.`);
   return mime;
+}
+function mediaPart(spec, mime, kind) {
+  const inferred = mime?.split('/')[0];
+  const type = spec.type ?? inferred ?? 'video';
+  choice(type, ['video', 'audio'], 'type');
+  if (inferred && inferred !== type) throw new UsageError(`Expected ${type}, got ${mime}: ${spec.source}`);
+  if (kind === 'youtube' && type !== 'video') throw new UsageError('YouTube URLs require video input; download the audio first');
+  const part = { type };
+  if (mime) part.mime_type = mime;
+  if (type === 'audio') {
+    if (['processing', 'start', 'end', 'fps', 'resolution'].some(key => spec[key] !== undefined)) {
+      throw new UsageError('Audio does not support processing, start, end, fps or resolution; request timestamps in the prompt');
+    }
+    if (spec.sampleRate !== undefined) part.sample_rate = number(spec.sampleRate, 'sample-rate', { integer: true, exclusive: true });
+    if (spec.channels !== undefined) part.channels = number(spec.channels, 'channels', { integer: true, exclusive: true });
+  } else {
+    if (spec.sampleRate !== undefined || spec.channels !== undefined) throw new UsageError('sample-rate and channels require audio input');
+    part.processing = processing(spec);
+    if (spec.resolution) part.resolution = choice(spec.resolution, ['low', 'medium', 'high', 'ultra_high'], 'resolution');
+    if (spec.name) part.name = spec.name;
+  }
+  return part;
 }
 function sourceKind(source) {
   if (/^files\/[A-Za-z0-9_-]+$/.test(source)) return 'file';
@@ -65,28 +92,28 @@ function sourceKind(source) {
 export function fileName(source) {
   return source.startsWith('https:') ? new URL(source).pathname.replace(/^\/v1beta\//, '') : source;
 }
-export async function inspectVideos(specs) {
-  if (specs.length > 10) throw new UsageError('At most 10 videos are allowed per request');
+export async function inspectMedia(specs) {
+  if (specs.length > 10) throw new UsageError('At most 10 media files are allowed per request');
   const result = [];
   for (const spec of specs) {
-    if (!spec || typeof spec.source !== 'string' || !spec.source.trim()) throw new UsageError('Every video requires a nonempty source');
+    if (!spec || typeof spec.source !== 'string' || !spec.source.trim()) throw new UsageError('Every media input requires a nonempty source');
     const kind = sourceKind(spec.source);
-    const part = { type: 'video', processing: processing(spec) };
-    if (spec.resolution) part.resolution = choice(spec.resolution, ['low', 'medium', 'high', 'ultra_high'], 'resolution');
-    if (spec.name) part.name = spec.name;
     const transport = choice(spec.transport ?? 'auto', ['upload', 'inline', 'auto'], 'transport');
     let size = 0;
     if (kind === 'local') {
       const info = await stat(spec.source);
-      if (!info.isFile() || info.size === 0) throw new UsageError(`Video must be a nonempty regular file: ${spec.source}`);
+      if (!info.isFile() || info.size === 0) throw new UsageError(`Media must be a nonempty regular file: ${spec.source}`);
       size = info.size;
-      if (size > FILE_LIMIT) throw new UsageError(`Video exceeds Files API 2 GB limit: ${spec.source}`);
-      part.mime_type = mimeType(spec.source, spec.mimeType);
-    } else if (spec.mimeType) part.mime_type = mimeType(spec.source, spec.mimeType);
+      if (size > FILE_LIMIT) throw new UsageError(`Media exceeds Files API 2 GB limit: ${spec.source}`);
+    }
+    const mime = kind === 'local' || spec.mimeType ? mimeType(spec.source, spec.mimeType, spec.type) : undefined;
+    const part = mediaPart(spec, mime, kind);
     result.push({ ...spec, kind, transport, size, part });
   }
   return result;
 }
+// Preserve the original public exports for existing library consumers.
+export const inspectVideos = inspectMedia;
 export function buildRequest(options, input) {
   const request = { model: options.model ?? DEFAULT_MODEL, input, store: !options.noStore };
   if (options.previous) request.previous_interaction_id = options.previous;
@@ -118,7 +145,7 @@ export async function waitForFile(client, file, context) {
     file = await client.files.get({ name: file.name });
   }
 }
-export async function uploadVideo(client, path, mime, context, onUploaded = () => {}) {
+export async function uploadMedia(client, path, mime, context, onUploaded = () => {}) {
   context.log(`Uploading ${basename(path)}...`);
   // The SDK copies path basenames into HTTP headers, which reject Unicode.
   // A file-backed Blob keeps uploads bounded in memory and the name in JSON only.
@@ -129,6 +156,7 @@ export async function uploadVideo(client, path, mime, context, onUploaded = () =
   context.log(`Uploaded ${file.name}`);
   return waitForFile(client, file, context);
 }
+export const uploadVideo = uploadMedia;
 export function outputText(result) {
   if (typeof result.output_text === 'string') return result.output_text;
   const texts = [];
@@ -170,7 +198,7 @@ export async function analyze(client, videos, prompt, options, context) {
     // Reserve room for prompt, history, config and JSON/base64 framing before inline allocation.
     let bytes = Buffer.byteLength(JSON.stringify(buildRequest(options, withHistory(options.history, [{ type: 'text', text: prompt }])))) + 64_000;
     for (const video of videos) {
-      const part = { ...video.part };
+      let part = { ...video.part };
       if (video.kind === 'local') {
         const encodedBytes = 4 * Math.ceil(video.size / 3) + Buffer.byteLength(JSON.stringify(part));
         const inline = video.transport === 'inline' || (video.transport === 'auto' && bytes + encodedBytes < REQUEST_LIMIT);
@@ -181,17 +209,20 @@ export async function analyze(client, videos, prompt, options, context) {
         } else if (options.dryRun) {
           part.uri = `<upload: ${video.source}>`;
         } else {
-          const file = await uploadVideo(client, video.source, part.mime_type, context, name => uploaded.push(name));
+          const file = await uploadMedia(client, video.source, part.mime_type, context, name => uploaded.push(name));
           part.uri = file.uri;
         }
       } else if (video.kind === 'file') {
         if (options.dryRun) part.uri = `<existing: ${fileName(video.source)}>`;
         else {
           const file = await waitForFile(client, await client.files.get({ name: fileName(video.source) }), context);
+          const mime = mimeType(video.source, file.mimeType);
+          part = mediaPart(video, mime, video.kind);
           part.uri = file.uri;
-          part.mime_type = file.mimeType;
         }
       } else part.uri = video.source;
+      // AudioContent has no name field; label named manifest audio with text.
+      if (part.type === 'audio' && video.name) parts.push({ type: 'text', text: `Audio: ${video.name}` });
       parts.push(part);
     }
     parts.push({ type: 'text', text: prompt });

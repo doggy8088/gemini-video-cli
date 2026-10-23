@@ -3,13 +3,14 @@ import { parseArgs } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { GoogleGenAI } from '@google/genai';
-import { UsageError, DEFAULT_MODEL, number, validateOptions, inspectVideos, analyze,
-  createContext, uploadVideo, fileName, outputText, waitForInteraction, mimeType } from './core.js';
+import { UsageError, DEFAULT_MODEL, number, validateOptions, inspectMedia, analyze,
+  createContext, uploadMedia, fileName, outputText, waitForInteraction, mimeType } from './core.js';
 
-const HELP = `gemini-video — Gemini video understanding CLI
+const HELP = `gemini-video — Gemini video and audio understanding CLI
 
 Usage:
   gemini-video analyze -v VIDEO -p PROMPT [options]
+  gemini-video --audio AUDIO -p PROMPT [options]
   echo 'Summarize this video' | gemini-video -v VIDEO
   gemini-video files upload PATH [--mime-type TYPE]
   gemini-video files list | get files/NAME | delete files/NAME
@@ -17,22 +18,25 @@ Usage:
 
 Inputs:
   -v, --video SOURCE       Repeat: local file, public YouTube URL, files/NAME
+  -a, --audio SOURCE       Repeat: local audio file or files/NAME
   -p, --prompt TEXT        Repeat; '-' reads prompt from STDIN
       --prompt-file PATH  Read UTF-8 prompt; combined with -p in that order
-      --manifest PATH     JSON array of per-video settings (see README)
+      --manifest PATH     JSON array of per-media settings (see README)
       --transport MODE    auto (default), upload, inline
       --mime-type TYPE    Override MIME for extensionless local files
-      --processing MODE   static (default), agentic
-      --start TIME        Seconds, MM:SS, HH:MM:SS (static only)
-      --end TIME          Exclusive end time (static only)
-      --fps NUMBER        Frame sampling rate > 0 (static only)
-      --resolution LEVEL  low, medium, high, ultra_high
+      --processing MODE   Video only: static (default), agentic
+      --start TIME        Video only: seconds, MM:SS, HH:MM:SS (static only)
+      --end TIME          Video only: exclusive end time (static only)
+      --fps NUMBER        Video only: frame sampling rate > 0 (static only)
+      --resolution LEVEL  Video only: low, medium, high, ultra_high
+      --sample-rate HZ    Audio only: positive integer sample rate
+      --channels N        Audio only: positive integer channel count
 
 Generation:
       --model MODEL       Default: GEMINI_MODEL or ${DEFAULT_MODEL}
       --system TEXT       System instruction
       --max-tokens N      Maximum output tokens
-      --previous ID       Continue stored interaction, video optional
+      --previous ID       Continue stored interaction, media optional
       --history PATH      Full step array from --save-history (stateless replay)
       --save-history PATH Save complete input and response steps for replay
       --no-store          Disable server-side interaction storage
@@ -57,6 +61,8 @@ Exit codes: 0 success, 1 API/I/O/processing failure, 2 invalid arguments.
 `;
 const definitions = {
   video: { type: 'string', short: 'v', multiple: true }, prompt: { type: 'string', short: 'p', multiple: true },
+  audio: { type: 'string', short: 'a', multiple: true },
+  'sample-rate': { type: 'string' }, channels: { type: 'string' },
   'prompt-file': { type: 'string' }, manifest: { type: 'string' }, transport: { type: 'string' },
   'mime-type': { type: 'string' }, processing: { type: 'string' }, start: { type: 'string' },
   end: { type: 'string' }, fps: { type: 'string' }, resolution: { type: 'string' },
@@ -120,12 +126,12 @@ async function main() {
     if (!actions.includes(action) || extra.length || (action === 'list' ? id !== undefined : !id)) throw new UsageError(`Usage: gemini-video ${command} ${actions.join('|')} ${command === 'files' ? 'PATH_OR_NAME' : 'ID'}`);
     let result;
     // Validate local input before constructing the authenticated client.
-    const upload = command === 'files' && action === 'upload' ? (await inspectVideos([{ source: id, mimeType: v['mime-type'] }]))[0] : undefined;
-    if (upload && upload.kind !== 'local') throw new UsageError('files upload requires a local video path');
+    const upload = command === 'files' && action === 'upload' ? (await inspectMedia([{ source: id, mimeType: v['mime-type'] }]))[0] : undefined;
+    if (upload && upload.kind !== 'local') throw new UsageError('files upload requires a local media path');
     if (command === 'files' && ['get', 'delete'].includes(action) && !/^files\/[A-Za-z0-9_-]+$/.test(fileName(id))) throw new UsageError('Expected files/NAME or a Files API URI');
     const ai = client();
     if (command === 'files') {
-      if (action === 'upload') result = await uploadVideo(ai, id, mimeType(id, v['mime-type']), context);
+      if (action === 'upload') result = await uploadMedia(ai, id, mimeType(id, v['mime-type']), context);
       if (action === 'list') {
         result = [];
         for await (const file of await ai.files.list({ config: { pageSize: 100 } })) result.push(file);
@@ -143,7 +149,7 @@ async function main() {
     await emit(JSON.stringify(result, null, 2));
     return;
   }
-  if (positionals.length > 1) throw new UsageError('Use --video for every video path or URL');
+  if (positionals.length > 1) throw new UsageError('Use --video or --audio for every media path or URL');
   if (v.history) options.history = await jsonFile(v.history);
   validateOptions(options);
   if (v['save-history'] && (options.previous || options.noWait)) throw new UsageError('--save-history requires --history or a new conversation, and a completed response');
@@ -158,12 +164,16 @@ async function main() {
   const prompt = prompts.join('\n\n').trim();
   if (!prompt) throw new UsageError('Prompt cannot be empty');
   const defaults = { transport: v.transport, mimeType: v['mime-type'], processing: v.processing,
-    start: v.start, end: v.end, fps: v.fps, resolution: v.resolution };
-  const specs = (v.video ?? []).map(source => ({ ...defaults, source }));
+    start: v.start, end: v.end, fps: v.fps, resolution: v.resolution,
+    sampleRate: v['sample-rate'], channels: v.channels };
+  const specs = [
+    ...(v.video ?? []).map(source => ({ ...defaults, source, type: 'video' })),
+    ...(v.audio ?? []).map(source => ({ ...defaults, source, type: 'audio' })),
+  ];
   if (v.manifest) {
     const manifest = await jsonFile(v.manifest);
     if (!Array.isArray(manifest)) throw new UsageError('Manifest must be an array');
-    const keys = ['source', 'transport', 'mimeType', 'processing', 'start', 'end', 'fps', 'resolution', 'name'];
+    const keys = ['source', 'type', 'transport', 'mimeType', 'processing', 'start', 'end', 'fps', 'resolution', 'name', 'sampleRate', 'channels'];
     for (const spec of manifest) {
       if (!spec || typeof spec !== 'object' || Array.isArray(spec) || Object.keys(spec).some(k => !keys.includes(k))) throw new UsageError(`Manifest entries allow only: ${keys.join(', ')}`);
       const merged = { ...defaults, ...spec };
@@ -171,8 +181,8 @@ async function main() {
       specs.push(merged);
     }
   }
-  if (!specs.length && !options.previous && !options.history?.length) throw new UsageError('Provide --video, --manifest, --previous or --history');
-  const videos = await inspectVideos(specs);
+  if (!specs.length && !options.previous && !options.history?.length) throw new UsageError('Provide --video, --audio, --manifest, --previous or --history');
+  const videos = await inspectMedia(specs);
   // Validate history even during dry-run, before any network effects.
   if (options.history && (!Array.isArray(options.history) || options.history.some(s => !s || typeof s.type !== 'string'))) throw new UsageError('History must be an array of steps');
   let streamed = false;

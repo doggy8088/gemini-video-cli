@@ -207,16 +207,17 @@ test('installed SDK uploads Unicode filenames with original metadata and exact b
   t.after(() => new Promise(resolve => server.close(resolve)));
   const client = new GoogleGenAI({ apiKey: 'local-test-key',
     httpOptions: { baseUrl: `http://127.0.0.1:${server.address().port}` } });
-  for (const name of ['特斯拉Roadster飛天跑車發表會展現飛行性能.zh-bilingual.burned.mp4', 'video-🚀.mp4', 'plain.mp4']) {
+  for (const name of ['特斯拉Roadster飛天跑車發表會展現飛行性能.zh-bilingual.burned.mp4', 'video-🚀.mp4', 'plain.mp4', '訪談-🎙️.mp3']) {
     const path = join(dir, name);
     const bytes = Buffer.from([0, 1, 2, 255]);
     await writeFile(path, bytes);
-    const result = await uploadVideo(client, path, 'video/mp4', ctx());
+    const mime = name.endsWith('.mp3') ? 'audio/mp3' : 'video/mp4';
+    const result = await uploadVideo(client, path, mime, ctx());
     assert.equal(result.state, 'ACTIVE');
     const [metadata, upload] = received.slice(-2);
     assert.equal(metadata.path, '/upload/v1beta/files');
     assert.equal(JSON.parse(metadata.body).file.displayName, name);
-    assert.equal(metadata.headers['x-goog-upload-header-content-type'], 'video/mp4');
+    assert.equal(metadata.headers['x-goog-upload-header-content-type'], mime);
     assert.equal(upload.path, '/upload-bytes');
     assert.deepEqual(upload.body, bytes);
   }
@@ -236,9 +237,111 @@ test('installed official SDK serializes actual Interactions requests against a l
   t.after(() => new Promise(resolve => server.close(resolve)));
   const client = new GoogleGenAI({ apiKey: 'local-test-key' });
   const request = { model: 'gemini-3.8-flash', store: false, input: [{ type: 'video', uri: 'https://youtu.be/test',
-    processing: processing({ start: 10, end: 20, fps: 0.5 }), resolution: 'high' }, { type: 'text', text: 'Describe.' }] };
+    processing: processing({ start: 10, end: 20, fps: 0.5 }), resolution: 'high' },
+    { type: 'audio', data: 'AAECAw==', mime_type: 'audio/l16', sample_rate: 16000, channels: 1 },
+    { type: 'audio', uri: 'https://generativelanguage.googleapis.com/v1beta/files/audio', mime_type: 'audio/mp3' },
+    { type: 'text', text: 'Describe.' }] };
   const response = await client.interactions.create(request, { server_url: `http://127.0.0.1:${server.address().port}`, retries: { strategy: 'none' } });
   assert.equal(response.output_text, 'A useful summary.');
   assert.match(received.path, /interactions/);
   assert.deepEqual(received.body, request);
+});
+
+test('audio formats infer the content type and preserve exact inline bytes', async t => {
+  const file = await fixture(t);
+  const formats = { wav: 'wav', mp3: 'mp3', aiff: 'aiff', aif: 'aiff', aac: 'aac',
+    ogg: 'ogg', oga: 'ogg', flac: 'flac', m4a: 'm4a', l16: 'l16', pcm: 'l16',
+    opus: 'opus', alaw: 'alaw', mulaw: 'mulaw' };
+  for (const [ext, mime] of Object.entries(formats)) {
+    const path = `${file}.${ext.toUpperCase()}`;
+    await writeFile(path, Buffer.from([0, 1, 2, 3]));
+    const media = await inspectVideos([{ source: path }]);
+    const client = fake();
+    await analyze(client, media, 'Transcribe', {}, ctx());
+    assert.deepEqual(client.calls[0][1].input[0], { type: 'audio', mime_type: `audio/${mime}`, data: 'AAECAw==' });
+  }
+});
+
+test('audio WebM, extensionless files, raw metadata and names use the audio schema', async t => {
+  const file = await fixture(t);
+  const webm = `${file}.webm`;
+  await writeFile(webm, 'webm');
+  const media = await inspectVideos([
+    { source: webm, type: 'audio' },
+    { source: file, mimeType: 'audio/l16', sampleRate: 16000, channels: 1, name: 'Interview' },
+  ]);
+  const client = fake();
+  await analyze(client, media, 'Compare', {}, ctx());
+  const parts = client.calls[0][1].input;
+  assert.equal(parts[0].mime_type, 'audio/webm');
+  assert.deepEqual(parts[1], { type: 'text', text: 'Audio: Interview' });
+  assert.deepEqual(parts[2], { type: 'audio', mime_type: 'audio/l16', sample_rate: 16000, channels: 1, data: 'AAECAw==' });
+});
+
+test('audio upload, existing-file inference, mixed inputs and cleanup share the lifecycle', async t => {
+  const source = `${await fixture(t)}.mp3`;
+  await writeFile(source, 'audio');
+  const ready = { name: 'files/audio', state: 'ACTIVE', uri: 'https://generativelanguage.googleapis.com/v1beta/files/audio', mimeType: 'audio/mpeg' };
+  const client = fake({ files: {
+    upload: async arg => { client.calls.push(['upload', arg]); return ready; },
+    get: async arg => { client.calls.push(['get', arg]); return ready; },
+  } });
+  const media = await inspectVideos([{ source, transport: 'upload' }, { source: ready.uri },
+    { source: 'https://youtu.be/test', processing: 'agentic' }]);
+  const result = await analyze(client, media, 'Compare', { cleanup: true }, ctx());
+  assert.deepEqual(client.calls.map(c => c[0]), ['upload', 'get', 'create', 'delete']);
+  assert.equal(client.calls[0][1].config.mimeType, 'audio/mp3');
+  assert.deepEqual(result.content[1], { type: 'audio', mime_type: 'audio/mpeg', uri: ready.uri });
+  assert.equal(result.content[2].processing, 'agentic');
+  assert.equal(result.content[0].type, 'audio');
+});
+
+test('audio rejects video settings, type mismatches and invalid raw metadata', async t => {
+  const file = await fixture(t);
+  for (const extra of [{ processing: 'static' }, { processing: 'agentic' }, { start: 0 }, { end: 1 },
+    { fps: 1 }, { resolution: 'low' }, { sampleRate: 0 }, { channels: 1.5 }, { type: 'video' }]) {
+    await assert.rejects(inspectVideos([{ source: file, mimeType: 'audio/wav', ...extra }]));
+  }
+  await assert.rejects(inspectVideos([{ source: 'https://youtu.be/test', type: 'audio' }]), /YouTube/);
+  await assert.rejects(inspectVideos([{ source: file, channels: 1 }]), /require audio/);
+  const ready = { name: 'files/audio', state: 'ACTIVE', uri: 'files/audio', mimeType: 'audio/mp3' };
+  const client = fake({ files: { get: async () => ready } });
+  const media = await inspectVideos([{ source: 'files/audio', processing: 'agentic' }]);
+  await assert.rejects(analyze(client, media, 'x', {}, ctx()), /Audio does not support/);
+  assert.equal(client.calls.length, 0);
+});
+
+test('audio auto transport accounts for aggregate mixed-media size', async t => {
+  const file = await fixture(t);
+  await truncate(file, 8_000_000);
+  const media = await inspectVideos([{ source: file }, { source: file, mimeType: 'audio/wav' }]);
+  const { request } = await analyze(null, media, 'Compare', { dryRun: true }, ctx());
+  assert.equal(request.input[1].type, 'audio');
+  assert.match(request.input[1].uri, /upload/);
+});
+
+test('audio survives streaming, background submission and complete history replay', async t => {
+  const file = await fixture(t);
+  const media = await inspectVideos([{ source: file, mimeType: 'audio/wav' }]);
+  const history = [{ type: 'user_input', content: [{ type: 'audio', uri: 'files/old', mime_type: 'audio/mp3' }] },
+    { type: 'model_output', content: [{ type: 'text', text: 'Earlier transcript' }] }];
+  const client = fake();
+  await analyze(client, media, 'Continue', { history, noStore: true }, ctx());
+  assert.deepEqual(client.calls[0][1].input.slice(0, 2), history);
+  assert.equal(client.calls[0][1].input[2].content[0].type, 'audio');
+  const background = fake({ interactions: { create: async request => {
+    assert.equal(request.input[0].type, 'audio');
+    return { id: 'audio-job', status: 'in_progress' };
+  } } });
+  assert.equal((await analyze(background, media, 'x', { background: true, noWait: true }, ctx())).result.id, 'audio-job');
+  assert.equal((await analyze(background, media, 'x', { background: true }, ctx())).result.status, 'completed');
+  async function* events() {
+    yield { event_type: 'step.delta', delta: { type: 'text', text: 'Transcript' } };
+    yield { event_type: 'interaction.completed', interaction: { id: 'audio-stream', status: 'completed' } };
+  }
+  const stream = fake({ interactions: { create: async request => {
+    assert.equal(request.input[0].type, 'audio');
+    return events();
+  } } });
+  assert.equal((await analyze(stream, media, 'x', { stream: true }, ctx())).text, 'Transcript');
 });

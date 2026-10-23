@@ -94,3 +94,39 @@ test('default auto selects inline or upload by aggregate size and permits explic
   await truncate(file, 16_000_000);
   assert.match(preview(['-v', file])[0].uri, /upload/);
 });
+
+test('audio flags, mixed manifest, raw metadata and dry-run work without credentials', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'gemini-audio-cli-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, '訪談.mp3');
+  await writeFile(file, 'audio');
+  const preview = args => {
+    const result = run([...args, '-p', '逐字稿', '--dry-run']);
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout).input;
+  };
+  assert.deepEqual(preview(['--audio', file])[0], { type: 'audio', mime_type: 'audio/mp3', data: '<base64: 5 bytes>' });
+  assert.match(preview(['-a', file, '--transport', 'upload'])[0].uri, /upload/);
+  assert.equal(preview(['-a', 'files/existing'])[0].type, 'audio');
+  assert.equal(preview(['-a', file, '-a', file]).filter(p => p.type === 'audio').length, 2);
+  const mixed = preview(['-a', file, '-v', 'https://youtu.be/test']);
+  assert.deepEqual(mixed.map(p => p.type), ['video', 'audio', 'text']);
+  const raw = preview(['-a', file, '--mime-type', 'audio/l16', '--sample-rate', '16000', '--channels', '1'])[0];
+  assert.equal(raw.sample_rate, 16000);
+  assert.equal(raw.channels, 1);
+  const manifest = join(dir, 'media.json');
+  await writeFile(manifest, JSON.stringify([{ source: '訪談.mp3', name: 'Interview' },
+    { source: 'files/existing', type: 'audio' }, { source: 'https://youtu.be/test', processing: 'agentic' }]));
+  const parts = preview(['--manifest', manifest]);
+  assert.deepEqual(parts.map(p => p.type), ['text', 'audio', 'audio', 'video', 'text']);
+  for (const args of [['-a', file, '--fps', '1'], ['-a', file, '--start', '0'],
+    ['-a', file, '--processing', 'agentic'], ['-a', file, '--channels', '0'],
+    ['-v', file], ['-a', 'https://youtu.be/test']]) {
+    const result = run([...args, '-p', 'x', '--dry-run']);
+    assert.equal(result.status, 2, result.stderr);
+  }
+  // The upload command accepts audio and reaches credential validation.
+  const upload = run(['files', 'upload', file]);
+  assert.equal(upload.status, 2);
+  assert.match(upload.stderr, /Set GEMINI_API_KEY/);
+});

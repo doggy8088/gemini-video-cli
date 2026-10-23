@@ -1,6 +1,6 @@
 # Gemini Video CLI
 
-在終端機完成 Gemini 影片理解：本機影片上傳、inline、YouTube、多影片比較、時間區間、FPS、agentic 分析、串流與多輪對話。使用官方 `@google/genai` SDK 的 Interactions API。
+在終端機完成 Gemini 影片與音訊理解：本機影音上傳、inline、YouTube、多檔比較、逐字稿、摘要、串流與多輪對話。影片另支援時間區間、FPS 與 agentic 分析。使用官方 `@google/genai` SDK 的 Interactions API。
 
 ## 安裝與快速開始
 
@@ -12,6 +12,7 @@ export GEMINI_API_KEY='你的金鑰'
 
 gemini-video --help
 gemini-video -v ./meeting.mp4 -p '用繁體中文摘要這段影片，附上重要時間點。'
+gemini-video -a ./meeting.mp3 -p '用繁體中文產生逐字稿，標示時間與說話者。'
 printf '%s\n' '列出主要事件及音訊與畫面細節。' | gemini-video -v ./meeting.mp4
 ```
 
@@ -45,9 +46,60 @@ cat questions.txt | gemini-video -v ./clip.mp4 -p '請回答下列問題：' -p 
  gemini-video -v ./clip.mp4 -p '摘要。' -o summary.txt
 ```
 
-未指定 `--prompt` 或 `--prompt-file` 時會讀取 STDIN。終端機互動模式下缺少提示詞會顯示錯誤；不會等待使用者猜測如何結束輸入。STDIN 用於提示詞，影片請用檔案路徑。
+未指定 `--prompt` 或 `--prompt-file` 時會讀取 STDIN。終端機互動模式下缺少提示詞會顯示錯誤；不會等待使用者猜測如何結束輸入。STDIN 用於提示詞，影音請用檔案路徑。
 
 分析預設輸出純文字。進度寫入 STDERR，可用 `--quiet` 關閉，不會污染管線的 STDOUT。`files`、`jobs` 與 `--no-wait` 一律輸出 JSON。`--output` 將輸出寫入指定檔案，新檔案使用 `0600` 權限；既有檔案會被覆寫。
+
+## 音檔理解
+
+使用 `-a`／`--audio` 指定音檔。支援 inline、Files API 上傳與重用、多檔比較、混合影片、串流、背景工作、清理與完整對話歷史。輸出為模型分析文字，可要求逐字稿、翻譯、摘要、說話者區分或聲音描述；辨識品質與時間標記準確度由模型決定。
+
+```bash
+# 預設 auto：小音檔 inline，大音檔自動上傳
+gemini-video -a ./meeting.mp3 -p '產生逐字稿，標示時間與說話者。'
+gemini-video -a ./meeting.m4a --transport upload --cleanup -p '整理會議決議。'
+gemini-video -a ./lecture.wav --stream -p '摘要課程重點。'
+
+# 多音檔與影音混合；同一次請求最多 10 個影音輸入
+gemini-video -a ./first.mp3 -a ./second.flac -p '比較兩段訪談的立場。'
+gemini-video -v ./demo.mp4 -a ./narration.mp3 -p '旁白與示範內容是否一致？'
+
+# 重用上傳音檔
+gemini-video files upload ./meeting.mp3
+gemini-video -a files/FILE_ID -p '列出待辦事項。'
+
+# 背景分析與多輪對話；後續可使用既有 jobs 指令
+gemini-video -a ./lecture.mp3 --background --no-wait -p '整理完整講義。'
+gemini-video -a ./meeting.mp3 --no-store --save-history audio-history.json -p '摘要。'
+gemini-video --history audio-history.json --no-store -p '展開第二個議題。'
+
+# 指定區間請寫在提示詞中
+gemini-video -a ./meeting.mp3 -p '只轉錄 02:30 到 03:29 的內容。'
+
+# 音訊 WebM、無副檔名檔案，以及原始 PCM 的中繼資料
+gemini-video -a ./recording.webm -p '描述聲音。'
+gemini-video -a ./recording --mime-type audio/mpeg -p '摘要。'
+gemini-video -a ./recording.pcm --sample-rate 16000 --channels 1 -p '轉錄。'
+```
+
+支援 `.wav`、`.mp3`、`.aiff`／`.aif`、`.aac`、`.ogg`／`.oga`、`.flac`、`.m4a`、`.l16`／`.pcm`、`.opus`、`.alaw`、`.mulaw` 與音訊 `.webm`。`audio/mp3` 與 `audio/mpeg` 均接受。`.pcm` 對應 `audio/l16`；請確認實際編碼相符，CLI 不轉碼。`--sample-rate` 與 `--channels` 必須為正整數，請依來源檔案填寫。
+
+`--processing`、`--start`、`--end`、`--fps`、`--resolution` 僅適用於影片。音檔的時間區間請以提示詞指定，CLI 不會裁切音檔。混合輸入若需要不同設定，請用 manifest 個別指定；全域參數會套用至所有輸入。
+
+manifest 支援 `type: "audio"` 或 `type: "video"`，省略時依 MIME 推斷；`.webm` 預設視為影片，音訊 WebM 請明確指定 `type: "audio"` 或 `mimeType: "audio/webm"`。音檔可設定 `sampleRate`、`channels`。音檔的 `name` 會轉成前置文字標籤，供比較時辨識。
+
+```json
+[
+  { "source": "./interview.mp3", "name": "訪談", "transport": "upload" },
+  { "source": "./recording.webm", "type": "audio" },
+  { "source": "files/FILE_ID", "type": "audio" },
+  { "source": "./demo.mp4", "processing": "agentic" }
+]
+```
+
+既有 Files URI 在正式執行時會讀取伺服器 MIME，確認內容類型。`--dry-run` 不連線；manifest 若只提供 Files URI，請加上 `type`，以正確預覽音訊請求。`-a` 已明確指定音訊。`-v` 則明確指定影片，傳入音檔會回報類型不符。兩種旗標混用時，請求先放影片再放音檔，各組保留旗標順序；需要精確交錯順序時請使用 manifest。
+
+音檔同樣受 20 MB inline 總請求大小與 CLI 的單檔 2 GB 上限限制。YouTube URL 使用 `-v`；`-a` 接受本機音檔與 Gemini Files URI，一般音檔下載網址請先下載。官方規格見 [音訊理解](https://ai.google.dev/gemini-api/docs/audio) 與 [Interactions API](https://ai.google.dev/static/api/interactions.md.txt)。
 
 ## 影片來源與檔案處理
 
@@ -116,7 +168,7 @@ cat questions.txt | gemini-video -v ./clip.mp4 -p '請回答下列問題：' -p 
   --prompt-file examples/compare.txt --dry-run
 ```
 
-每次最多 10 部影片。重複 `--video` 使用相同的全域設定；`--manifest` 允許各影片覆寫設定，也可以與 `--video` 同用。manifest 的相對檔案路徑以 **manifest 所在資料夾**為基準。欄位如下：
+每次最多 10 個影音輸入。重複 `--video`／`--audio` 使用相同的全域設定；`--manifest` 允許各輸入覆寫設定，也可以與這兩種旗標同用。manifest 的相對檔案路徑以 **manifest 所在資料夾**為基準。欄位如下：
 
 ```json
 [
@@ -264,7 +316,7 @@ printf '%s\n' '描述重要事件。' | make run ARGS='-v ./clip.mp4'
 
 `run` 與 `demo` 不會把 Make recipe 印到 STDOUT，可將結果直接接到其他程式。需要指定執行檔時可覆寫 `NODE` 或 `NPM`，例如 `make demo NODE=/path/to/node`。Makefile 任務均須在專案目錄執行；`install-global` 會更新目前 npm 全域環境中的命令。
 
-目前 29 項測試涵蓋 CLI 輸入、處理狀態、錯誤、清理、串流、背景工作、對話步驟、Unicode 檔名上傳與 SDK 請求序列化。測試只使用模擬服務與本機 HTTP 伺服器，不消耗 Gemini 配額。**尚未進行真實 Google API 上傳／推論測試**；要驗證帳戶、模型及真實影片相容性，可先執行 dry-run，再用自己的短影片送出一次請求。
+目前 36 項測試涵蓋音檔格式、音訊與影片混合、原始音訊中繼資料、 CLI 輸入、處理狀態、錯誤、清理、串流、背景工作、對話步驟、Unicode 檔名上傳與 SDK 請求序列化。測試只使用模擬服務與本機 HTTP 伺服器，不消耗 Gemini 配額。**尚未進行真實 Google API 上傳／推論測試**；要驗證帳戶、模型及真實影片相容性，可先執行 dry-run，再用自己的短影片送出一次請求。
 
 退出碼：`0` 成功、`1` API／I/O／處理失敗、`2` 參數或必要設定錯誤。
 
@@ -284,8 +336,9 @@ PR 會在 Linux、macOS、Windows 的 Node.js 22／24 執行測試。每次 main
 
 ## 官方來源
 
-查閱日期：2026-10-22。Gemini API 仍會更新，請以官方文件及帳戶可用模型為準。
+查閱日期：2026-10-23。Gemini API 仍會更新，請以官方文件及帳戶可用模型為準。
 
+- [Audio understanding](https://ai.google.dev/gemini-api/docs/audio)
 - [Video understanding](https://ai.google.dev/gemini-api/docs/video-understanding)
 - [Files API](https://ai.google.dev/gemini-api/docs/files)
 - [Interactions API](https://ai.google.dev/gemini-api/docs/interactions)

@@ -3,6 +3,15 @@
 日期：2026-10-22
 環境：macOS、Node.js v24.22.1、npm 12.2.1、@google/genai 2.30.0。
 
+## 音檔支援更新（2026-10-23）
+
+- 新增 `-a`／`--audio`，涵蓋官方音訊 MIME、inline、自動選擇傳輸、上傳與既有 Files URI。
+- 支援影音混合 manifest、音訊取樣率／聲道數、串流、背景工作及對話重播。
+- 拒絕音檔搭配影片專用參數，以及明確指定類型與來源 MIME 不符的輸入。
+- `npm test`：36 項測試全部通過。包含官方 SDK 對本機 HTTP 服務的音訊 inline／URI JSON 序列化、中文與 emoji 音檔名稱及原始上傳位元組驗證。
+- `npm run check`、`npm pack --dry-run`、`git diff --check` 通過。
+- 尚未呼叫真實 Google API；未驗證真實音檔的辨識品質與模型可用性。
+
 ## 預設 auto 傳輸更新
 
 - `--video` 與未設定 `transport` 的 manifest 項目，預設改為 `auto`。
