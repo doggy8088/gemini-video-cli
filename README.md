@@ -11,9 +11,9 @@ npm install --global gemini-video-cli
 export GEMINI_API_KEY='你的金鑰'
 
 gemini-video --help
-gemini-video -v ./meeting.mp4 -p '用繁體中文摘要這段影片，附上重要時間點。'
-gemini-video -a ./meeting.mp3 -p '用繁體中文產生逐字稿，標示時間與說話者。'
-printf '%s\n' '列出主要事件及音訊與畫面細節。' | gemini-video -v ./meeting.mp4
+gemini-video -i ./meeting.mp4 -p '用繁體中文摘要這段影片，附上重要時間點。'
+gemini-video -i ./meeting.mp3 -p '用繁體中文產生逐字稿，標示時間與說話者。'
+printf '%s\n' '列出主要事件及音訊與畫面細節。' | gemini-video -i ./meeting.mp4
 ```
 
 套件名稱是 `gemini-video-cli`，安裝後的命令是 `gemini-video`。可在影片所在的資料夾直接執行，不需要下載原始碼。更新至最新版時，重新執行上述安裝指令即可。
@@ -52,7 +52,7 @@ cat questions.txt | gemini-video -v ./clip.mp4 -p '請回答下列問題：' -p 
 
 ## 音檔理解
 
-使用 `-a`／`--audio` 指定音檔。支援 inline、Files API 上傳與重用、多檔比較、混合影片、串流、背景工作、清理與完整對話歷史。輸出為模型分析文字，可要求逐字稿、翻譯、摘要、說話者區分或聲音描述；辨識品質與時間標記準確度由模型決定。
+使用 `-i`／`--input` 指定輸入，CLI 會依副檔名自動判斷是影片或音檔（`.webm` 視為影片；YouTube URL 視為影片；無副檔名的檔案請加 `--mime-type`；`files/NAME` 在 `--dry-run` 預設預覽為影片，正式執行時依伺服器 MIME 判斷）。`-a`／`--audio` 與 `-v`／`--video` 仍可明確指定類型，例如音訊 `.webm`；它們不會顯示在 `-h` 中，只列在 `--help`。多個 `-i` 依輸入順序送出，排在 `-v`、`-a` 之後。支援 inline、Files API 上傳與重用、多檔比較、混合影片、串流、背景工作、清理與完整對話歷史。輸出為模型分析文字，可要求逐字稿、翻譯、摘要、說話者區分或聲音描述；辨識品質與時間標記準確度由模型決定。
 
 ```bash
 # 預設 auto：小音檔 inline，大音檔自動上傳

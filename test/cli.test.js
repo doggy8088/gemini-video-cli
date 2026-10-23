@@ -16,6 +16,16 @@ test('help/version require no credentials', () => {
   const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(run(['--version']).stdout.trim(), version);
 });
+test('-h hides -v/-a while --help lists them', () => {
+  const short = run(['-h']).stdout;
+  const long = run(['--help']).stdout;
+  assert.match(short, /-i, --input/);
+  assert.doesNotMatch(short, /^ +-v, --video/m);
+  assert.doesNotMatch(short, /^ +-a, --audio/m);
+  assert.match(long, /^ +-i, --input/m);
+  assert.match(long, /^ +-v, --video/m);
+  assert.match(long, /^ +-a, --audio/m);
+});
 test('STDIN, explicit STDIN and repeated prompts', () => {
   const a = run(base, '  Summarize from pipe\n');
   assert.equal(a.status, 0, a.stderr);
@@ -131,4 +141,23 @@ test('audio flags, mixed manifest, raw metadata and dry-run work without credent
   const upload = run(['files', 'upload', file]);
   assert.equal(upload.status, 2);
   assert.match(upload.stderr, /Set GEMINI_API_KEY/);
+});
+
+test('-i detects video or audio from the extension', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'gemini-input-cli-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  for (const name of ['clip.mp4', 'talk.mp3', 'talk.m4a', 'noext']) await writeFile(join(dir, name), 'x');
+  const preview = args => {
+    const result = run([...args, '-p', 'x', '--dry-run']);
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout).input;
+  };
+  assert.deepEqual(preview(['-i', join(dir, 'clip.mp4')])[0], { type: 'video', mime_type: 'video/mp4', processing: 'static', data: '<base64: 1 bytes>' });
+  assert.deepEqual(preview(['-i', join(dir, 'talk.mp3')])[0], { type: 'audio', mime_type: 'audio/mp3', data: '<base64: 1 bytes>' });
+  assert.equal(preview(['--input', join(dir, 'talk.m4a')])[0].mime_type, 'audio/m4a');
+  assert.equal(preview(['-i', 'https://youtu.be/test'])[0].type, 'video');
+  assert.deepEqual(preview(['-i', join(dir, 'talk.mp3'), '-i', join(dir, 'clip.mp4')]).map(p => p.type), ['audio', 'video', 'text']);
+  assert.equal(preview(['-i', join(dir, 'noext'), '--mime-type', 'audio/mpeg'])[0].type, 'audio');
+  assert.equal(run(['-i', join(dir, 'noext'), '-p', 'x', '--dry-run']).status, 2);
+  assert.equal(run(['-i', join(dir, 'talk.mp3'), '--fps', '1', '-p', 'x', '--dry-run']).status, 2);
 });
