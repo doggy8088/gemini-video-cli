@@ -158,6 +158,8 @@ test('-i detects video or audio from the extension', async t => {
   assert.equal(preview(['-i', 'https://youtu.be/test'])[0].type, 'video');
   assert.deepEqual(preview(['-i', join(dir, 'talk.mp3'), '-i', join(dir, 'clip.mp4')]).map(p => p.type), ['audio', 'video', 'text']);
   assert.equal(preview(['-i', join(dir, 'noext'), '--mime-type', 'audio/mpeg'])[0].type, 'audio');
+  const raw = preview(['-i', 'files/RAW', '--sample-rate', '16000', '--channels', '1'])[0];
+  assert.deepEqual([raw.type, raw.sample_rate, raw.channels], ['audio', 16000, 1]);
   assert.equal(run(['-i', join(dir, 'noext'), '-p', 'x', '--dry-run']).status, 2);
   assert.equal(run(['-i', join(dir, 'talk.mp3'), '--fps', '1', '-p', 'x', '--dry-run']).status, 2);
 });
