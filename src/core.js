@@ -1,4 +1,5 @@
 import { readFile, stat } from 'node:fs/promises';
+import { openAsBlob } from 'node:fs';
 import { extname, basename } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -119,7 +120,10 @@ export async function waitForFile(client, file, context) {
 }
 export async function uploadVideo(client, path, mime, context, onUploaded = () => {}) {
   context.log(`Uploading ${basename(path)}...`);
-  const file = await client.files.upload({ file: path, config: { mimeType: mime, displayName: basename(path) } });
+  // The SDK copies path basenames into HTTP headers, which reject Unicode.
+  // A file-backed Blob keeps uploads bounded in memory and the name in JSON only.
+  const blob = await openAsBlob(path, { type: mime });
+  const file = await client.files.upload({ file: blob, config: { mimeType: mime, displayName: basename(path) } });
   if (!file.name) throw new Error('Upload response did not include a file name');
   onUploaded(file.name);
   context.log(`Uploaded ${file.name}`);

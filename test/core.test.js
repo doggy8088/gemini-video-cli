@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { GoogleGenAI } from '@google/genai';
 import { analyze, inspectVideos, processing, seconds, createContext, waitForFile,
-  waitForInteraction, withHistory, validateOptions, outputText, REQUEST_LIMIT } from '../src/core.js';
+  waitForInteraction, withHistory, validateOptions, outputText, REQUEST_LIMIT, uploadVideo } from '../src/core.js';
 
 const done = { id: 'interaction-1', status: 'completed', steps: [
   { type: 'model_output', content: [{ type: 'text', text: 'A useful summary.' }] },
@@ -181,6 +181,45 @@ test('stream failures and missing completion are errors', async () => {
 test('output text excludes intermediate model outputs separated by processing', () => {
   assert.equal(outputText({ steps: [{ type: 'model_output', content: [{ type: 'text', text: 'old' }] },
     { type: 'processing_result' }, { type: 'model_output', content: [{ type: 'text', text: 'new' }] }] }), 'new');
+});
+
+test('installed SDK uploads Unicode filenames with original metadata and exact bytes', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'gemini-video-unicode-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const received = [];
+  const server = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = Buffer.concat(chunks);
+    received.push({ path: req.url, headers: req.headers, body });
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/upload/v1beta/files') {
+      res.setHeader('X-Goog-Upload-URL', `http://127.0.0.1:${server.address().port}/upload-bytes`);
+      res.end('{}');
+    } else {
+      res.setHeader('X-Goog-Upload-Status', 'final');
+      res.end(JSON.stringify({ file: { name: 'files/test', state: 'ACTIVE',
+        uri: 'https://generativelanguage.googleapis.com/v1beta/files/test', mimeType: 'video/mp4' } }));
+    }
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const client = new GoogleGenAI({ apiKey: 'local-test-key',
+    httpOptions: { baseUrl: `http://127.0.0.1:${server.address().port}` } });
+  for (const name of ['特斯拉Roadster飛天跑車發表會展現飛行性能.zh-bilingual.burned.mp4', 'video-🚀.mp4', 'plain.mp4']) {
+    const path = join(dir, name);
+    const bytes = Buffer.from([0, 1, 2, 255]);
+    await writeFile(path, bytes);
+    const result = await uploadVideo(client, path, 'video/mp4', ctx());
+    assert.equal(result.state, 'ACTIVE');
+    const [metadata, upload] = received.slice(-2);
+    assert.equal(metadata.path, '/upload/v1beta/files');
+    assert.equal(JSON.parse(metadata.body).file.displayName, name);
+    assert.equal(metadata.headers['x-goog-upload-header-content-type'], 'video/mp4');
+    assert.equal(upload.path, '/upload-bytes');
+    assert.deepEqual(upload.body, bytes);
+  }
 });
 
 test('installed official SDK serializes actual Interactions requests against a local HTTP fixture', async t => {
