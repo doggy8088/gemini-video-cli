@@ -1,6 +1,6 @@
 {
   "name": "gemini-video-cli",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Gemini video understanding from your terminal: files, YouTube, prompts and conversations",
   "type": "module",
   "bin": {

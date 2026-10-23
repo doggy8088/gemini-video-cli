@@ -59,7 +59,8 @@ export function mimeType(path, override, type) {
 }
 function mediaPart(spec, mime, kind) {
   const inferred = mime?.split('/')[0];
-  const type = spec.type ?? inferred ?? 'video';
+  // A Files reference has no type until its server MIME is read; raw audio metadata can only be audio.
+  const type = spec.type ?? inferred ?? (spec.sampleRate !== undefined || spec.channels !== undefined ? 'audio' : 'video');
   choice(type, ['video', 'audio'], 'type');
   if (inferred && inferred !== type) throw new UsageError(`Expected ${type}, got ${mime}: ${spec.source}`);
   if (kind === 'youtube' && type !== 'video') throw new UsageError('YouTube URLs require video input; download the audio first');

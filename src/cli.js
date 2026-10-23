@@ -9,16 +9,15 @@ import { UsageError, DEFAULT_MODEL, number, validateOptions, inspectMedia, analy
 const HELP = `gemini-video — Gemini video and audio understanding CLI
 
 Usage:
-  gemini-video analyze -v VIDEO -p PROMPT [options]
-  gemini-video --audio AUDIO -p PROMPT [options]
-  echo 'Summarize this video' | gemini-video -v VIDEO
+  gemini-video analyze -i MEDIA -p PROMPT [options]
+  echo 'Summarize this video' | gemini-video -i MEDIA
   gemini-video files upload PATH [--mime-type TYPE]
   gemini-video files list | get files/NAME | delete files/NAME
   gemini-video jobs get ID [--wait] | cancel ID | delete ID
 
 Inputs:
-  -v, --video SOURCE       Repeat: local file, public YouTube URL, files/NAME
-  -a, --audio SOURCE       Repeat: local audio file or files/NAME
+  -i, --input SOURCE       Repeat: local file, public YouTube URL, files/NAME;
+                           video or audio is detected from the file extension
   -p, --prompt TEXT        Repeat; '-' reads prompt from STDIN
       --prompt-file PATH  Read UTF-8 prompt; combined with -p in that order
       --manifest PATH     JSON array of per-media settings (see README)
@@ -53,13 +52,20 @@ Output / operation:
       --timeout SECONDS   HTTP / each processing wait timeout (default: 600)
       --poll SECONDS      Poll interval (default: 2)
   -q, --quiet             Hide progress on STDERR
-  -h, --help              Show help
+  -h, --help              Show help (--help also lists -v/--video and -a/--audio)
       --version           Show version
 
 Authentication: GEMINI_API_KEY or GOOGLE_API_KEY. Use Node --env-file for .env.
 Exit codes: 0 success, 1 API/I/O/processing failure, 2 invalid arguments.
 `;
+// -i detects the type from the extension; --help also documents the explicit overrides.
+const EXPLICIT_INPUTS = `  -v, --video SOURCE       Repeat: force video (local file, public YouTube URL, files/NAME)
+  -a, --audio SOURCE       Repeat: force audio (local audio file or files/NAME)
+`;
+const HELP_FULL = HELP.replace('  -p, --prompt TEXT', `${EXPLICIT_INPUTS}  -p, --prompt TEXT`)
+  .replace('  gemini-video analyze -i MEDIA', '  gemini-video analyze -v VIDEO -p PROMPT [options]\n  gemini-video --audio AUDIO -p PROMPT [options]\n  gemini-video analyze -i MEDIA');
 const definitions = {
+  input: { type: 'string', short: 'i', multiple: true },
   video: { type: 'string', short: 'v', multiple: true }, prompt: { type: 'string', short: 'p', multiple: true },
   audio: { type: 'string', short: 'a', multiple: true },
   'sample-rate': { type: 'string' }, channels: { type: 'string' },
@@ -87,10 +93,15 @@ async function stdin() {
 }
 async function main() {
   let parsed;
-  try { parsed = parseArgs({ options: definitions, allowPositionals: true, strict: true }); }
+  try { parsed = parseArgs({ options: definitions, allowPositionals: true, strict: true, tokens: true }); }
   catch (error) { throw new UsageError(error.message); }
-  const { values: v, positionals } = parsed;
-  if (v.help) { process.stdout.write(HELP); return; }
+  const { values: v, positionals, tokens } = parsed;
+  if (v.help) {
+    // -h is the short summary; only the long --help lists -v and -a.
+    const long = tokens.some(t => t.kind === 'option' && t.name === 'help' && t.rawName === '--help');
+    process.stdout.write(long ? HELP_FULL : HELP);
+    return;
+  }
   if (v.version) {
     const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     process.stdout.write(`${version}\n`);
@@ -149,7 +160,7 @@ async function main() {
     await emit(JSON.stringify(result, null, 2));
     return;
   }
-  if (positionals.length > 1) throw new UsageError('Use --video or --audio for every media path or URL');
+  if (positionals.length > 1) throw new UsageError('Use --input, --video or --audio for every media path or URL');
   if (v.history) options.history = await jsonFile(v.history);
   validateOptions(options);
   if (v['save-history'] && (options.previous || options.noWait)) throw new UsageError('--save-history requires --history or a new conversation, and a completed response');
@@ -169,6 +180,8 @@ async function main() {
   const specs = [
     ...(v.video ?? []).map(source => ({ ...defaults, source, type: 'video' })),
     ...(v.audio ?? []).map(source => ({ ...defaults, source, type: 'audio' })),
+    // No explicit type: core infers video or audio from the MIME type of the extension.
+    ...(v.input ?? []).map(source => ({ ...defaults, source })),
   ];
   if (v.manifest) {
     const manifest = await jsonFile(v.manifest);
@@ -181,7 +194,7 @@ async function main() {
       specs.push(merged);
     }
   }
-  if (!specs.length && !options.previous && !options.history?.length) throw new UsageError('Provide --video, --audio, --manifest, --previous or --history');
+  if (!specs.length && !options.previous && !options.history?.length) throw new UsageError('Provide --input, --manifest, --previous or --history');
   const videos = await inspectMedia(specs);
   // Validate history even during dry-run, before any network effects.
   if (options.history && (!Array.isArray(options.history) || options.history.some(s => !s || typeof s.type !== 'string'))) throw new UsageError('History must be an array of steps');

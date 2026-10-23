@@ -296,6 +296,18 @@ test('audio upload, existing-file inference, mixed inputs and cleanup share the 
   assert.equal(result.content[0].type, 'audio');
 });
 
+test('untyped Files references keep raw audio metadata until the server MIME is known', async () => {
+  const [pending] = await inspectVideos([{ source: 'files/raw', sampleRate: 16000, channels: 1 }]);
+  assert.deepEqual(pending.part, { type: 'audio', sample_rate: 16000, channels: 1 });
+  const ready = { name: 'files/raw', state: 'ACTIVE', uri: 'https://generativelanguage.googleapis.com/v1beta/files/raw', mimeType: 'audio/l16' };
+  const client = fake({ files: { get: async () => ready } });
+  const result = await analyze(client, [pending], 'x', {}, ctx());
+  assert.deepEqual(result.content[0], { type: 'audio', mime_type: 'audio/l16', sample_rate: 16000, channels: 1, uri: ready.uri });
+  const [video] = await inspectVideos([{ source: 'files/raw', sampleRate: 16000 }]);
+  const stored = fake({ files: { get: async () => ({ ...ready, mimeType: 'video/mp4' }) } });
+  await assert.rejects(analyze(stored, [video], 'x', {}, ctx()), /require audio input/);
+});
+
 test('audio rejects video settings, type mismatches and invalid raw metadata', async t => {
   const file = await fixture(t);
   for (const extra of [{ processing: 'static' }, { processing: 'agentic' }, { start: 0 }, { end: 1 },
