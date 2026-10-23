@@ -1,11 +1,11 @@
 ---
 name: bump-and-release
-description: 為 gemini-video-cli 升版並透過既有 GitHub Actions 發布至 npm。使用者要求 release、發布 patch/minor/major 或指定版本時使用；僅調整版本而不發布時依使用者限定範圍執行。
+description: 為 gemini-video-cli 升版、透過既有 GitHub Actions 發布至 npm，並建立 GitHub Release。使用者要求 release、發布 patch/minor/major 或指定版本時使用；僅調整版本而不發布時依使用者限定範圍執行。
 ---
 
 # Bump and Release
 
-完成版本調整、驗證、提交及既有發布流程，直到 npm 可查到對應版本與發布提交。使用正體中文回報。
+完成版本調整、驗證、提交及既有發布流程，直到 npm 可查到對應版本與發布提交，且 GitHub Release 已公開並指向相同提交。使用正體中文回報與撰寫發布說明。
 
 所有專案路徑皆相對於 `git rev-parse --show-toplevel`，不依賴技能目錄或軟連結的位置。
 
@@ -13,7 +13,7 @@ description: 為 gemini-video-cli 升版並透過既有 GitHub Actions 發布至
 
 ## 呼叫語意
 
-明確呼叫本技能並附上 `patch`、`minor` 或 `major`，即表示要求以該類型升版並完成發布，等同於「發布 patch／minor／major 版本」，授權範圍包含相關版本調整、驗證、提交、依儲存庫規則推送與發布，以及發布結果核對。
+明確呼叫本技能並附上 `patch`、`minor` 或 `major`，即表示要求以該類型升版並完成發布，等同於「發布 patch／minor／major 版本」，授權範圍包含相關版本調整、驗證、提交、依儲存庫規則推送與 npm 發布、建立 GitHub Release 與對應標籤，以及發布結果核對。
 
 - `$bump-and-release patch` 等同於 `$bump-and-release 發布 patch 版本`。
 - `$bump-and-release minor` 與 `$bump-and-release major` 套用相同規則。
@@ -62,6 +62,22 @@ rm "$commit_msg_file"
 2. 由既有 GitHub Actions 與 npm Trusted Publishing 發布。不要額外執行本機 `npm publish`，也不要為同一提交製造另一個發布入口。
 3. 找到對應發布提交 SHA 的 workflow run，記錄 URL 並追蹤到結束。確認所有 CI 與發布工作成功；等待期間持續提供簡短進度。
 4. 使用 `npm view <name>@<target> version gitHead dist-tags --json` 核對：版本正確、`gitHead` 等於發布提交 SHA、`latest` 指向目標穩定版。若採 PR 合併，使用實際觸發發布的合併提交 SHA。
-5. 回報已發布版本、主要變更、驗證結果、發布提交與 workflow URL，以及工作目錄是否仍有變更。只有 workflow 成功與 registry 核對皆完成，才宣告發布完成。
+5. npm 驗證成功後，依下節建立 GitHub Release。若 workflow 已建立 Release，核對現有結果即可。
+6. 回報已發布版本、主要變更、驗證結果、發布提交、workflow 與 GitHub Release URL，以及工作目錄是否仍有變更。只有 workflow 成功、registry 核對與 GitHub Release 核對皆完成，才宣告完整發布完成。
 
 若 workflow 失敗，先檢查失敗步驟與 registry。npm 已接受發布但 registry 尚未傳播時，沿用現有流程的等待期限；目前驗證腳本最多等待 10 分鐘。逾時後回報未完成的驗證與執行 URL，不自動升到另一版。確認同一提交尚未發布且已排除失敗原因後，才重試原 workflow；同一原因再次失敗時停止自動重試並回報。若版本或 `gitHead` 不符，停止並查明衝突，不覆寫 dist-tag。
+
+* * *
+
+## 建立 GitHub Release
+
+使用 `v<target>` 作為標籤與 Release 標題；如儲存庫已有其他標籤命名慣例，依現行慣例處理。發布目標一律使用 npm 已驗證的完整 `gitHead`，避免 `main` 在等待期間前進而指向其他提交。
+
+1. 查詢同名 GitHub Release 與遠端標籤。區分查無物件與認證、網路錯誤；查詢失敗時先處理原因。既有標籤須解析至實際 commit，含 annotated tag 的解參照。若提交與 npm `gitHead` 不一致，停止並回報；不移動或覆寫標籤。
+2. 依前一個已發布 Release 至目標提交的實際 diff 與提交記錄，撰寫正體中文 Markdown 發布說明，涵蓋主要變更、相容性影響、驗證結果與 npm 安裝指令。首次 Release 以目標提交中的已驗證功能為依據。將說明寫入亂數 UTF-8 暫存檔，交由 `--notes-file` 讀取。
+3. 同名 Release 不存在且標籤不存在時，執行 `gh release create "v<target>" --target "<published-sha>" --title "v<target>" --notes-file "<notes-file>"`，由 GitHub 在指定提交建立標籤。若標籤已存在且提交核對相符，加上 `--verify-tag`。以上佔位值執行前須替換成已確認的資料。
+4. 若同名 Release 已公開且核對相符，沿用並回報其 URL；若為同版本同提交的草稿，檢查內容後完成公開。使用 `gh release view` 核對 tag、URL、發布說明、`isDraft=false` 與穩定版的 `isPrerelease=false`，並再次確認遠端標籤解析後的提交等於 npm `gitHead`。
+
+GitHub Release 建立失敗時，明確回報「npm 已發布，GitHub Release 尚未完成」。重試前先查現有 Release 與標籤，僅補完缺漏步驟，不重新發布 npm 或遞增版本；同一原因再次失敗時停止自動重試。此步驟由技能透過 GitHub CLI 執行，不代表單獨 push 就會自動建立 GitHub Release。
+
+指令語意參考：[GitHub CLI release create](https://cli.github.com/manual/gh_release_create)。
