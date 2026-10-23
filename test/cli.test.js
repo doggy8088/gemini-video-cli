@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, writeFile, rm, truncate } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -12,7 +13,8 @@ const base = ['-v', 'https://youtu.be/test', '--dry-run'];
 
 test('help/version require no credentials', () => {
   assert.match(run(['--help']).stdout, /gemini-video/);
-  assert.equal(run(['--version']).stdout.trim(), '0.1.0');
+  const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(run(['--version']).stdout.trim(), version);
 });
 test('STDIN, explicit STDIN and repeated prompts', () => {
   const a = run(base, '  Summarize from pipe\n');
