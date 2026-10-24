@@ -20,6 +20,12 @@ test('-h hides -v/-a while --help lists them', () => {
   const short = run(['-h']).stdout;
   const long = run(['--help']).stdout;
   assert.match(short, /-i, --input/);
+  for (const help of [short, long]) {
+    assert.match(help, /^Commands:$/m);
+    assert.match(help, /^ +analyze \(default\)/m);
+    assert.match(help, /^ +files /m);
+    assert.match(help, /^ +jobs /m);
+  }
   assert.doesNotMatch(short, /^ +-v, --video/m);
   assert.doesNotMatch(short, /^ +-a, --audio/m);
   assert.match(long, /^ +-i, --input/m);
