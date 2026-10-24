@@ -9,11 +9,16 @@ import { UsageError, DEFAULT_MODEL, number, validateOptions, inspectMedia, analy
 const HELP = `gemini-video — Gemini video and audio understanding CLI
 
 Usage:
-  gemini-video analyze -i MEDIA -p PROMPT [options]
+  gemini-video [analyze] -i MEDIA -p PROMPT [options]
   echo 'Summarize this video' | gemini-video -i MEDIA
   gemini-video files upload PATH [--mime-type TYPE]
   gemini-video files list | get files/NAME | delete files/NAME
   gemini-video jobs get ID [--wait] | cancel ID | delete ID
+
+Commands:
+  analyze (default)        Analyze video/audio with a prompt; the word may be omitted
+  files                    Manage Gemini Files API uploads (upload, list, get, delete)
+  jobs                     Inspect, wait for, cancel or delete background jobs
 
 Inputs:
   -i, --input SOURCE       Repeat: local file, public YouTube URL, files/NAME;
@@ -63,7 +68,7 @@ const EXPLICIT_INPUTS = `  -v, --video SOURCE       Repeat: force video (local f
   -a, --audio SOURCE       Repeat: force audio (local audio file or files/NAME)
 `;
 const HELP_FULL = HELP.replace('  -p, --prompt TEXT', `${EXPLICIT_INPUTS}  -p, --prompt TEXT`)
-  .replace('  gemini-video analyze -i MEDIA', '  gemini-video analyze -v VIDEO -p PROMPT [options]\n  gemini-video --audio AUDIO -p PROMPT [options]\n  gemini-video analyze -i MEDIA');
+  .replace('  gemini-video [analyze] -i MEDIA', '  gemini-video [analyze] -v VIDEO -p PROMPT [options]\n  gemini-video [analyze] -a AUDIO -p PROMPT [options]\n  gemini-video [analyze] -i MEDIA');
 const definitions = {
   input: { type: 'string', short: 'i', multiple: true },
   video: { type: 'string', short: 'v', multiple: true }, prompt: { type: 'string', short: 'p', multiple: true },
